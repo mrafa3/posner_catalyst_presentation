@@ -1,0 +1,277 @@
+---
+title: "Pardee Trends: Graphics"
+author: "Mickey Rafa"
+date: "July 2017"
+output:
+  html_notebook:
+    toc: yes
+    fig.width: 7
+    fig.align: "center"
+  html_document:
+    toc: yes
+    toc_depth: 3
+    fig.height: 6.2
+    fig.align: "center"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(stringr)
+library(gridExtra)
+library(scales)
+library(extrafont)
+library(cowplot)
+library(tweenr)
+library(gganimate)
+library(grid)
+library(magick)
+```
+
+```{r pardee.theme, include=TRUE}
+pardee.theme <- theme(
+  plot.title = element_text(family="Gill Sans MT", color="#871B31", face="bold", size=36, hjust=0), 
+  plot.subtitle = element_text(family="Gill Sans MT", color="black", size=14, hjust=0), 
+  axis.title = element_text(family="Gill Sans MT", color="black", face="bold", size=12), 
+  axis.text = element_text(family="Gill Sans MT", color="black", size=22),
+  axis.title.x = element_text(family="Gill Sans MT", color="black", size=22),
+  axis.title.y = element_text(family="Gill Sans MT", color="black", size=22),
+  plot.caption = element_text(family="Gill Sans MT", color="black", size=12), 
+  panel.border = element_blank(),
+  panel.background =  element_blank(),
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(),
+  legend.title=element_blank(), 
+  legend.text = element_text(family="Gill Sans MT", color="black", size=20, hjust = 0),
+  legend.spacing.x = unit(.3, 'cm'), 
+  legend.position = 'top',
+  strip.text.x = element_text(margin = margin(.3,0,.3,0, "cm")), 
+  strip.text = element_text(family="Gill Sans MT", color="black", size=16, face="bold"))
+
+line_2017 <- geom_vline(xintercept = 2017, linetype = 'longdash')
+
+pt_groups <- read.csv('pardee_trends_groups.csv')
+pardee_group <- pt_groups %>% filter(main_group == 'Pardee Group')
+
+p_trends_cols <- c('POPGT65' = '#871B31', 'POP0TO5' = "#D4B75A",
+                   'Sub-Saharan Africa' = 'steelblue3', 'Rest of World' = 'darkgray')
+```
+
+```{r logo, include=TRUE}
+logo <- image_read(".//images/pardee_logo.png")
+logo_ext <- image_read(".//images/pardee_logo_extended.png")
+```
+
+
+```{r read_data, include=TRUE}
+df <- read_csv('.//data/ifs_results_posner.csv') %>% 
+  gather(year, val, 5:145) %>% 
+  mutate(year = as.numeric(year), 
+         variable = ifelse(str_detect(variable, "\\["), str_sub(variable, end=-4), variable))
+```
+
+```{r fig.height=6.2}
+p <- df %>% 
+  filter(variable %in% c('POPGT65', 'POP0TO5'),
+         year <= 2060) %>% 
+  group_by(variable, year) %>% 
+  summarise(val = sum(val, na.rm = TRUE)) %>% 
+  ggplot(.) + 
+  geom_line(aes(x=year,
+                y=val / 1000,
+                group=variable,
+                color=variable), size = 2) + 
+  ggtitle('World population is aging fast') + 
+  line_2017 + 
+  labs(y='',
+       x='') + 
+  annotate(geom = "text", x=2007, y=.16,
+           label = expression('' %<-%'Estimate'), color="black", size=6, family="Gill Sans MT") + 
+  annotate(geom = "text", x=2028, y=.15,
+           label = expression('Projection' %->% ''), color="black", size=6, family="Gill Sans MT") + 
+  scale_x_continuous(breaks = c(seq(1960, 2060, by=20))) + 
+  scale_y_continuous(position = "right") + 
+  scale_color_manual(values = p_trends_cols,
+                     labels = c('POP0TO5' = 'Under 5',
+                                'POPGT65' = '65 and over')) + 
+  pardee.theme + 
+  theme(legend.position = c(.05, .87),
+        legend.key.height = unit(.5, "inches"))
+```
+
+```{r fig.height=6.2}
+p
+grid::grid.raster(logo, x=.88, y=.93, width = unit(1, 'inches'))
+```
+
+
+```{r}
+ggsave(".//graphics/testfig_1.pdf", plot= p,
+       height = 6.2, width = 10, family="Gill Sans MT", device=cairo_pdf, dpi = 300)
+```
+
+```{r fig.height=6.2}
+p + 
+  labs(caption = '\n')
+grid::grid.raster(logo_ext, x=.8, y=.07, width = unit(2.5, 'inches'))
+```
+
+
+
+```{r fig.height=6.2}
+df %>% 
+  filter(year %in% c(2019, 2060),
+         variable == 'POP0TO5') %>% 
+  spread(year, val) %>% 
+  mutate(diff = `2060` - `2019`) %>% 
+  arrange(-diff) %>% 
+  top_n(8, diff) %>% 
+  ggplot(.) + 
+  geom_bar(aes(x=reorder(country, diff),
+               y=diff), stat='identity', color='darkgray', fill='seagreen') +
+  ggtitle('Change in under 5 populations by country from 2019 to 2060', 
+          subtitle = 'Top 8') + 
+  labs(x='',
+       y='Growth in Under 5 population (millions)') + 
+  coord_flip() + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15)) + 
+  pardee.theme + 
+  scale_fill_manual(values = p_trends_cols) + 
+  theme(plot.title = element_text(size=19),
+        axis.text = element_text(size=16),
+        axis.title.x = element_text(size=16))
+```
+
+```{r fig.height=7}
+df_health <- df %>% 
+  filter(variable %in% c('Commun', 'NonCommun', 'Injuries'),
+         #country %in% c('WB High-Income Economies', 'WB Low-Income Economies'), 
+         year <= 2060, 
+         !is.na(val))
+
+df_health$country <- factor(df_health$country, levels = c('WB Low-Income Economies', 'WB LowMidIncome Economies',
+                                                          'WB UpMidIncome Economies', 'WB High-Income Economies'))
+
+df_health %>% 
+  ggplot(.) + 
+  geom_line(aes(x=year,
+                y=val,
+                color=variable), size = 2) + 
+  labs(y='Deaths per thousand\n',
+       x='') + 
+  facet_wrap(~country,
+             labeller = as_labeller(c('WB Low-Income Economies' = 'Low Income',
+                                      'WB LowMidIncome Economies' = 'Low-Middle Income',
+                                      'WB UpMidIncome Economies' = 'Upper-Middle Income',
+                                      'WB High-Income Economies' = 'High Income'))) + 
+  scale_color_manual(values = c("red2", "green3", "blue"),
+                     labels = c('Communicable', 'Injuries & Accidents', 'Non-communicable')) + 
+  pardee.theme + 
+  theme(axis.text = element_text(size=16))
+```
+
+```{r fig.height=6.2}
+demog_trans <- df %>% 
+  left_join(x=.,
+            y=pardee_group,
+            by=c('country' = 'Country')) %>% 
+  filter(variable %in% c('CBR', 'CDR')) %>% 
+  filter(country %in% c('Japan', 'Uganda', 'Brazil')) %>% 
+  filter(year <= 2060 ) %>% 
+  spread(variable, val)
+```
+
+
+```{r fig.width=10}
+demog_trans_edit <- demog_trans %>%
+  arrange(country, year) %>%
+  select(CDR, CBR, year, country, sub_group) %>%
+  rename(x=CDR,y=CBR,time=year,id=country) %>%
+  mutate(ease="linear")
+
+demog_trans_tween <- tween_elements(demog_trans_edit,
+                                  "time", "id", "ease", nframes = 100) %>%
+  mutate(year = round(time), country = .group) %>%
+  left_join(demog_trans, by=c("country","year","sub_group"))
+
+animate_1 <- demog_trans_tween %>% 
+  ggplot(.,
+         aes(x=x, y=y, frame = year)) +
+  geom_point(aes(color=sub_group), size = 3) +
+  ggtitle('Demographic Transition') + 
+  labs(x='Crude death rate\n',
+       y='Crude birth rate\n') + 
+  pardee.theme
+  #scale_alpha_discrete(range = c('China' = 1,
+   #                               'Other' = .25)) + 
+  #theme(legend.position = 'top') + 
+  #guides(size='none', alpha='none')
+
+gganimate(animate_1, interval=0.1, ani.width = 1000, ani.height = 700, ".//graphics/test.gif")
+```
+
+```{r}
+(demog_trans_tween$country <- factor(demog_trans_tween$country, levels = c('Uganda',
+                                                                          'Brazil',
+                                                                          'Japan')))
+
+
+(animate_2 <- demog_trans_tween %>% 
+  ggplot(.,
+         aes(x=x,
+             y=y,
+             color=country)) +  
+  geom_path(aes(group=country),
+            size=1.75,
+            alpha=.3) +
+  geom_point(aes(frame = year), size=7) + 
+  #annotate("text", x=16, y=10, label="Japan", family="Gill Sans MT", size=15) + 
+  ggtitle('Demographic Transition:',
+          subtitle = '') + 
+  labs(x='Crude death rate\n',
+       y='Crude birth rate\n') + 
+  scale_color_manual(values = c("steelblue", "tomato3", "green3"), 
+                     labels = c("Uganda", "Brazil", "?")) + 
+  #guides(color=guide_legend()) + 
+  pardee.theme + 
+   theme(plot.title = element_text(size=50),
+         legend.text = element_text(size=35),
+         axis.text.x = element_text(size=30),
+         axis.text.y = element_text(size=30),
+         axis.title = element_text(25),
+         legend.spacing.x = unit(1.2, 'cm')))
+```
+
+```{r}
+gganimate(animate_2, interval=0.2, ani.width = 1000, ani.height = 700, ".//graphics/test_5.gif")
+```
+
+```{r fig.height=6.2}
+(p_2 <- df %>% 
+  filter(variable == 'INCOMELT190LN',
+         year %in% c(1990, 2015, 2040)) %>% 
+  ggplot(.) + 
+  geom_bar(aes(x=as.factor(year),
+               y=val / 1000,
+               fill=country), 
+           stat='identity', position='stack', color='darkgray') + 
+  #ggtitle('Extreme poverty headcount: Sub-Saharan Africa vs. Rest of World') + 
+  labs(x='Year',
+       y='Population below $3.10 / day (billions)\n') + 
+  scale_fill_manual(values = p_trends_cols) + 
+  pardee.theme + 
+  theme(axis.title.y = element_text(size=16)))
+```
+
+
+
+
+```{r fig.height=7, fig.width=10}
+ggplot() + 
+  ggtitle('Demographic Transition\n') + 
+  labs(x='Crude death rate\n(Deaths per thousand population)\n',
+       y='Crude birth rate\n(Births per thousand population)\n') + 
+  pardee.theme + 
+  theme(plot.title = element_text(size=30))
+
+ggsave(".//graphics/test_start.png", width = 10, height = 7)
+```

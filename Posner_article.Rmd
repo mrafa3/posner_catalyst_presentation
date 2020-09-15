@@ -1,0 +1,148 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, message=FALSE}
+library(tidyverse)
+library(scales)
+library(extrafont)
+library(grid)
+library(magick)
+``` 
+
+```{r pardee.theme, include=TRUE}
+pardee.theme <- theme(
+  plot.title = element_text(family="Gill Sans MT", color="#871B31", face="bold", size=28, hjust=0), 
+  plot.subtitle = element_text(family="Gill Sans MT", color="black", size=14, hjust=0), 
+  axis.title = element_text(family="Gill Sans MT", color="black", face="bold", size=12), 
+  axis.text = element_text(family="Gill Sans MT", color="black", size=22),
+  axis.title.x = element_text(family="Gill Sans MT", color="black", size=22),
+  axis.title.y = element_text(family="Gill Sans MT", color="black", size=22),
+  plot.caption = element_text(family="Gill Sans MT", color="black", size=12), 
+  panel.border = element_blank(),
+  panel.background =  element_blank(),
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(),
+  legend.title=element_blank(), 
+  legend.text = element_text(family="Gill Sans MT", color="black", size=20, hjust = 0),
+  legend.spacing.x = unit(.3, 'cm'), 
+  legend.position = 'top',
+  strip.text.x = element_text(margin = margin(.3,0,.3,0, "cm")), 
+  strip.text = element_text(family="Gill Sans MT", color="black", size=16, face="bold"))
+
+
+line_2019 <- geom_vline(xintercept = 2019, linetype = 'longdash', color = "gray60")
+
+logo_ext <- image_read(".//images/pardee_logo_extended.png")
+```
+
+```{r p_trends_cols, include=TRUE}
+p_trends_cols <- c('Africa' = '#871B31', 'South Asia' = 'steelblue',
+                   'Latin America & the Caribbean' = 'purple',
+                   'Middle East' = 'seagreen', 'East & Southeast Asia' = '#D4B75A')
+```
+
+```{r df_youth, include=TRUE}
+(df_youth <- readxl::read_xlsx('.//data/youth_africa.xlsx') %>% 
+   gather(year, val, 5:115) %>% 
+   mutate(year = as.numeric(year)))
+```
+
+```{r fig.height=6.2}
+(p <- df_youth %>% 
+  ggplot(.) + 
+  geom_line(aes(x=year,
+                y=val,
+                group=country,
+                color=country),
+            size=1.5) + 
+  line_2019 + 
+  ggtitle('Youth populations swelling in Africa',
+          subtitle = 'IFs Current Path scenario') + 
+  labs(x='',
+       y='',
+       caption = '\n\n') + 
+  #annotate(geom = "text", x=2009, y=850,
+   #        label = expression('' %<-%'Estimate'), color="black", size=6, family="Gill Sans MT") + 
+  #annotate(geom = "text", x=2032, y=850,
+   #        label = expression('Projection' %->% ''), color="black", size=6, family="Gill Sans MT") + 
+  scale_y_continuous(position = 'right',
+                     limits = c(0, 800),
+                     labels = c('', '200 mil', '400 mil', '600 mil', '800 mil')) + 
+  scale_x_continuous(breaks = seq(1960, 2070, by=10)) + 
+  guides(color=guide_legend(nrow = 2)) + 
+  #scale_color_manual() + 
+  pardee.theme + 
+  theme(legend.position = c(.2, .84),
+        legend.key.height = unit(.25, "inches"),
+        axis.text.x = element_text(angle = 45), 
+        panel.grid.major.y = element_line(colour = "grey90", size = 0.5),
+        legend.text = element_text(size=12)))
+```
+
+```{r fig.height=6.2}
+p
+grid::grid.raster(logo_ext, x=.8, y=.12, width = unit(2.5, 'inches'))
+```
+
+# Regional groups (Pardee regions)
+
+```{r pardee_group, include=TRUE}
+(pardee_group <- read.csv('.//data/pardee_trends_groups.csv') %>% 
+  filter(main_group == 'Pardee Group'))
+```
+
+
+```{r}
+(df_youth_2 <- readxl::read_xlsx('.//data/youth_africa.xlsx', sheet = 'all_countries') %>% 
+   gather(year, val, 5:115) %>% 
+   mutate(year = as.numeric(year)) %>% 
+   left_join(x=.,
+             y=pardee_group,
+             by=c('country' = 'Country')))
+```
+
+```{r fig.height=6.2}
+(p2 <- df_youth_2 %>% 
+  filter(!sub_group %in% c('Oceania', 'Russia & the Caucasus',
+                           'North America', 'Europe')) %>% 
+  group_by(variable, year, sub_group_2) %>% 
+  summarise(val = sum(val, na.rm = TRUE)) %>% 
+  ggplot(.) + 
+  geom_line(aes(x=year,
+                y=val,
+                color=sub_group_2), size=1.5) + 
+  line_2015 + 
+  ggtitle('Youth populations growing in Africa',
+          subtitle = 'Population under 15, IFs Current Path scenario') + 
+  labs(x='',
+       y='',
+       caption = '\n\n') + 
+  annotate(geom = "text", x=2008.5, y=37,
+           label = expression('' %<-%'Data'), color="gray60", size=5, family="Gill Sans MT") + 
+  annotate(geom = "text", x=2024.4, y=33,
+           label = expression('Projection' %->% ''), color="gray60", size=5, family="Gill Sans MT") + 
+  scale_y_continuous(position = 'right',
+                     limits = c(0, 800),
+                     labels = c('', '200 mil', '400 mil', '600 mil', '800 mil')) + 
+  scale_x_continuous(breaks = seq(1960, 2070, by=10)) + 
+  guides(color=guide_legend(nrow = 2)) + 
+  scale_color_manual(values = p_trends_cols,
+                     labels = c('Latin America & the Caribbean' = 'Latin America',
+                                'East & Southeast Asia' = 'East & SE Asia')) + 
+  pardee.theme + 
+  theme(panel.grid.major.y = element_line(colour = "grey90", size = 0.5),
+        #axis.text.x = element_text(angle = 45), 
+        legend.position = c(.26, .84),
+        legend.key.height = unit(.25, "inches"),
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(size=14),
+        axis.text.y = element_text(size = 18)))
+```
+
+```{r fig.height=6.2}
+p2
+grid::grid.raster(logo_ext, x=.8, y=.085, width = unit(2.5, 'inches'))
+```
+
